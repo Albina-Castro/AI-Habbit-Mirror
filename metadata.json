@@ -1,0 +1,6 @@
+{
+  "name": "AI Habit Mirror",
+  "description": "A smart behavior coach that helps you reflect on your daily habits and stay aligned with your goals through real-time feedback.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}
