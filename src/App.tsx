@@ -164,17 +164,29 @@ export default function App() {
   const captureAndAnalyze = async () => {
     if (!videoRef.current || !canvasRef.current || isAnalyzing || !isCameraOn) return;
 
+    // Check if video is ready and has dimensions
+    if (videoRef.current.videoWidth === 0 || videoRef.current.videoHeight === 0) {
+      console.warn("Video dimensions not ready for capture");
+      return;
+    }
+
     setIsAnalyzing(true);
     try {
       const canvas = canvasRef.current;
       const video = videoRef.current;
+      
+      // Use set dimensions to avoid empty canvas
       canvas.width = video.videoWidth;
       canvas.height = video.videoHeight;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
       
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const base64Image = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+      const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+
+      if (!base64Image || base64Image.length < 100) {
+        throw new Error("Captured image is empty or invalid");
+      }
 
       const imagePart = {
         inlineData: {
@@ -377,7 +389,10 @@ export default function App() {
             <div className="w-10 h-10 rounded-xl bg-indigo-600/20 flex items-center justify-center border border-indigo-500/30">
               <Sparkles size={20} className="text-indigo-400" />
             </div>
-            <span className="text-lg font-light tracking-tight text-white">AI Habit Mirror</span>
+            <div className="flex flex-col">
+              <span className="text-xl font-bold tracking-tight text-white leading-none">HabitLens</span>
+              <span className="text-[10px] uppercase tracking-[0.2em] text-indigo-400 font-bold mt-1">AI Habit Mirror</span>
+            </div>
           </div>
           <button 
             onClick={() => setIsSetup(true)}
@@ -567,9 +582,9 @@ export default function App() {
               onClick={() => setShowHistory(!showHistory)}
               className={`${showHistory ? 'text-white' : 'hover:text-indigo-400'} transition-colors flex items-center gap-2`}
             >
-              Recent Logs
+              Reflection Log
             </button>
-            <span className="cursor-pointer hover:text-indigo-400 transition-colors">Goal Map</span>
+            <span className="cursor-pointer hover:text-indigo-400 transition-colors">HabitLens Map</span>
             <span className="cursor-pointer hover:text-indigo-400 transition-colors">Insights</span>
             <span className="cursor-pointer hover:text-indigo-400 transition-colors">Settings</span>
           </nav>

@@ -1,6 +1,6 @@
 {
-  "name": "AI Habit Mirror",
-  "description": "A smart behavior coach that helps you reflect on your daily habits and stay aligned with your goals through real-time feedback.",
+  "name": "HabitLens",
+  "description": "An AI-powered behavioral mirror that uses real-time vision to help you maintain focus and stay aligned with your daily goals.",
   "requestFramePermissions": ["camera"],
   "majorCapabilities": []
 }
