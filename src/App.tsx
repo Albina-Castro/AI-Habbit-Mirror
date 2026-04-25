@@ -65,6 +65,14 @@ export default function App() {
   const [mirrorResponse, setMirrorResponse] = useState<string>('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [activeView, setActiveView] = useState<'home' | 'insights'>('home');
+  const [report, setReport] = useState<{
+    score: number;
+    summary: string;
+    insights: string[];
+    advice: string[];
+  } | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
   // Camera States
   const [isCameraOn, setIsCameraOn] = useState(false);
@@ -158,6 +166,52 @@ export default function App() {
     const hours = Math.floor(mins / 60);
     if (hours > 0) return `${hours}h ${mins % 60}m`;
     return `${mins}m`;
+  };
+
+  const generateReport = async () => {
+    if (history.length === 0) return;
+    setIsGeneratingReport(true);
+    try {
+      const summary = getDailySummary();
+      const fullHistoryStr = history
+        .map(h => `[${h.timestamp.toLocaleTimeString()}] ${h.activity}`)
+        .join('\n');
+
+      const prompt = `
+        As the HabitLens AI coach, generate a COMPREHENSIVE DAILY REPORT.
+        
+        GOAL: ${profile.goal}
+        MOTIVATION: ${profile.description}
+        
+        ACTIVITY LOG:
+        ${fullHistoryStr}
+        
+        SUMMARY STATS:
+        - Study/Work: ${formatDuration(summary.studyTime)}
+        - Phone/Social: ${formatDuration(summary.phoneTime)}
+        - Internal/Idle: ${formatDuration(summary.idleTime)}
+        
+        Return a JSON report with:
+        {
+          "score": (0-100 score of goal achievement),
+          "summary": (brief 2-sentence executive summary),
+          "insights": [3 bullet points of patterns detected],
+          "advice": [2 specific actionable tips for tomorrow]
+        }
+      `;
+
+      const result = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: prompt,
+        config: { responseMimeType: "application/json" }
+      });
+
+      setReport(JSON.parse(result.text || '{}'));
+    } catch (error) {
+      console.error("Report error:", error);
+    } finally {
+      setIsGeneratingReport(false);
+    }
   };
 
   // --- Actions ---
@@ -478,100 +532,192 @@ export default function App() {
 
           {/* Main Panel */}
           <main className="flex-1 flex flex-col gap-6">
-            <div className="flex-1 glass-card-heavy p-10 flex flex-col relative overflow-hidden">
-              {/* Light Overlay */}
-              <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-tr from-white/5 to-transparent pointer-events-none"></div>
+            <AnimatePresence mode="wait">
+              {activeView === 'home' ? (
+                <motion.div 
+                  key="home"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="flex-1 glass-card-heavy p-10 flex flex-col relative overflow-hidden"
+                >
+                  {/* Light Overlay */}
+                  <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-tr from-white/5 to-transparent pointer-events-none"></div>
 
-              {/* Live Info Header */}
-              <div className="flex justify-between items-start mb-12 relative z-10">
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)] animate-pulse"></div>
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest font-mono">Live Reflection</span>
+                  {/* Live Info Header */}
+                  <div className="flex justify-between items-start mb-12 relative z-10">
+                    <div>
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.6)] animate-pulse"></div>
+                        <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest font-mono">Live Reflection</span>
+                      </div>
+                      <h3 className="text-3xl font-light text-white">
+                        {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <span className="text-slate-600 mx-3 font-thin">•</span>
+                        <span className="text-slate-400 text-xl">
+                          {history[0]?.activity || "Awaiting Activity"}
+                        </span>
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <button 
+                        onClick={() => captureAndAnalyze()}
+                        disabled={!isCameraOn || isAnalyzing}
+                        className="p-3 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white transition-all disabled:opacity-30"
+                        title="Manual Mirror Reflection"
+                      >
+                        <Sparkles size={20} className={isAnalyzing ? 'animate-spin' : ''} />
+                      </button>
+                      <div className="text-right">
+                        <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Mirror Mode</p>
+                        <p className="text-sm text-indigo-400 font-medium">{isCameraOn ? 'Auto-Reflecting' : 'Manual Log'}</p>
+                      </div>
+                    </div>
                   </div>
-                  <h3 className="text-3xl font-light text-white">
-                    {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    <span className="text-slate-600 mx-3 font-thin">•</span>
-                    <span className="text-slate-400 text-xl">
-                      {history[0]?.activity || "Awaiting Activity"}
-                    </span>
-                  </h3>
-                </div>
-                <div className="flex items-center gap-6">
-                  <button 
-                    onClick={() => captureAndAnalyze()}
-                    disabled={!isCameraOn || isAnalyzing}
-                    className="p-3 rounded-xl bg-white/5 border border-white/10 text-slate-400 hover:bg-white/10 hover:text-white transition-all disabled:opacity-30"
-                    title="Manual Mirror Reflection"
-                  >
-                    <Sparkles size={20} className={isAnalyzing ? 'animate-spin' : ''} />
-                  </button>
-                  <div className="text-right">
-                    <p className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Mirror Mode</p>
-                    <p className="text-sm text-indigo-400 font-medium">{isCameraOn ? 'Auto-Reflecting' : 'Manual Log'}</p>
-                  </div>
-                </div>
-              </div>
 
-              {/* AI Mirror Response */}
-              <div className="flex-1 flex flex-col justify-center max-w-[600px] relative z-10">
-                <AnimatePresence mode="wait">
-                  {mirrorResponse ? (
-                    <motion.div
-                      key={mirrorResponse}
-                      initial={{ opacity: 0, scale: 0.98 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 1.02 }}
+                  {/* AI Mirror Response */}
+                  <div className="flex-1 flex flex-col justify-center max-w-[600px] relative z-10">
+                    <AnimatePresence mode="wait">
+                      {mirrorResponse ? (
+                        <motion.div
+                          key={mirrorResponse}
+                          initial={{ opacity: 0, scale: 0.98 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          exit={{ opacity: 0, scale: 1.02 }}
+                        >
+                          <h1 className="text-[32px] leading-tight font-light text-white italic mb-6">
+                             "{mirrorResponse}"
+                          </h1>
+                        </motion.div>
+                      ) : (
+                        <div className="text-slate-500 italic text-2xl font-light">
+                          Silence is the first step to reflection. Log what you're doing.
+                        </div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Input Overlay */}
+                  <div className="mt-8 relative z-10">
+                    <div className="relative group">
+                      <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-[24px] blur opacity-20 group-focus-within:opacity-40 transition duration-1000"></div>
+                      <div className="relative flex">
+                        <input 
+                          type="text"
+                          value={currentActivity}
+                          onChange={e => setCurrentActivity(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleLogActivity(currentActivity)}
+                          placeholder="What are you doing now?"
+                          className="flex-1 px-6 py-5 bg-[#0D0E15] border border-white/5 rounded-l-[24px] text-lg text-white placeholder:text-slate-600 focus:outline-none"
+                        />
+                        <button 
+                          onClick={() => handleLogActivity(currentActivity)}
+                          disabled={!currentActivity.trim() || isGenerating}
+                          className="bg-indigo-600 text-white px-8 rounded-r-[24px] font-medium hover:bg-indigo-500 transition-all disabled:opacity-50 flex items-center gap-2"
+                        >
+                          {isGenerating ? <Activity className="animate-spin" size={18} /> : <Send size={18} />}
+                          Log
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {['Studying 📚', 'Using phone 📱', 'Take a break ☕', 'Reading 📖', 'Working 💻'].map(preset => (
+                        <button 
+                          key={preset}
+                          onClick={() => handleLogActivity(preset.replace(/[^a-zA-Z ]/g, "").trim())}
+                          className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/5 text-slate-400 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div 
+                  key="insights"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                  className="flex-1 glass-card-heavy p-10 flex flex-col relative overflow-hidden"
+                >
+                  <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-bl from-indigo-500/10 to-transparent pointer-events-none"></div>
+                  
+                  <div className="flex justify-between items-center mb-8 relative z-10">
+                    <h2 className="text-3xl font-light text-white">Daily Insight Report</h2>
+                    <button 
+                      onClick={generateReport}
+                      disabled={isGeneratingReport || history.length === 0}
+                      className="px-6 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-500 transition-all disabled:opacity-50 flex items-center gap-2"
                     >
-                      <h1 className="text-[32px] leading-tight font-light text-white italic mb-6">
-                         "{mirrorResponse}"
-                      </h1>
-                    </motion.div>
+                      {isGeneratingReport ? <Activity className="animate-spin" size={16} /> : <Sparkles size={16} />}
+                      Regenerate
+                    </button>
+                  </div>
+
+                  {!report ? (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+                      <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4 border border-white/10">
+                        <PieChart size={32} className="text-slate-500" />
+                      </div>
+                      <h3 className="text-xl font-medium text-white mb-2">No Report Available</h3>
+                      <p className="text-slate-400 max-w-xs">
+                        Log some activities first, then push the button to see your behavioral mirror report.
+                      </p>
+                      <button 
+                        onClick={generateReport}
+                        disabled={history.length === 0}
+                        className="mt-6 px-8 py-3 bg-white/10 border border-white/10 text-white rounded-2xl hover:bg-white/20 transition-all disabled:opacity-30"
+                      >
+                        Generate Initial Report
+                      </button>
+                    </div>
                   ) : (
-                    <div className="text-slate-500 italic text-2xl font-light">
-                      Silence is the first step to reflection. Log what you're doing.
+                    <div className="flex-1 space-y-8 relative z-10 overflow-y-auto pr-2 custom-scrollbar">
+                      {/* Score Section */}
+                      <div className="flex items-end gap-4">
+                        <div className="text-6xl font-light text-indigo-400">{report.score}%</div>
+                        <div className="pb-2 text-slate-500 uppercase text-[10px] tracking-widest font-bold">Goal Alignment</div>
+                      </div>
+
+                      {/* Summary Text */}
+                      <p className="text-xl text-slate-300 font-light leading-relaxed italic border-l-2 border-indigo-500/30 pl-6">
+                        "{report.summary}"
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-6">
+                        {/* Insights */}
+                        <div className="glass-card p-6 border-indigo-500/10">
+                          <h4 className="text-[10px] uppercase font-bold tracking-widest text-indigo-400 mb-4">Core Patterns</h4>
+                          <ul className="space-y-4">
+                            {report.insights.map((insight, i) => (
+                              <li key={i} className="flex gap-3 text-sm text-slate-300 leading-snug">
+                                <span className="text-indigo-500 font-mono">0{i+1}</span>
+                                {insight}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+
+                        {/* Advice */}
+                        <div className="glass-card p-6 border-purple-500/10">
+                          <h4 className="text-[10px] uppercase font-bold tracking-widest text-purple-400 mb-4">Habit Advice</h4>
+                          <ul className="space-y-4">
+                            {report.advice.map((tip, i) => (
+                              <li key={i} className="flex gap-3 text-sm text-slate-300 leading-snug">
+                                <CheckCircle2 size={16} className="text-purple-500 flex-shrink-0 mt-0.5" />
+                                {tip}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      </div>
                     </div>
                   )}
-                </AnimatePresence>
-              </div>
-
-              {/* Input Overlay */}
-              <div className="mt-8 relative z-10">
-                <div className="relative group">
-                  <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-[24px] blur opacity-20 group-focus-within:opacity-40 transition duration-1000"></div>
-                  <div className="relative flex">
-                    <input 
-                      type="text"
-                      value={currentActivity}
-                      onChange={e => setCurrentActivity(e.target.value)}
-                      onKeyDown={e => e.key === 'Enter' && handleLogActivity(currentActivity)}
-                      placeholder="What are you doing now?"
-                      className="flex-1 px-6 py-5 bg-[#0D0E15] border border-white/5 rounded-l-[24px] text-lg text-white placeholder:text-slate-600 focus:outline-none"
-                    />
-                    <button 
-                      onClick={() => handleLogActivity(currentActivity)}
-                      disabled={!currentActivity.trim() || isGenerating}
-                      className="bg-indigo-600 text-white px-8 rounded-r-[24px] font-medium hover:bg-indigo-500 transition-all disabled:opacity-50 flex items-center gap-2"
-                    >
-                      {isGenerating ? <Activity className="animate-spin" size={18} /> : <Send size={18} />}
-                      Log
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mt-4">
-                  {['Studying 📚', 'Using phone 📱', 'Take a break ☕', 'Reading 📖', 'Working 💻'].map(preset => (
-                    <button 
-                      key={preset}
-                      onClick={() => handleLogActivity(preset.replace(/[^a-zA-Z ]/g, "").trim())}
-                      className="px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/5 text-slate-400 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all"
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </main>
         </div>
 
@@ -579,13 +725,24 @@ export default function App() {
         <footer className="mt-auto py-8">
           <nav className="flex justify-center gap-10 text-[11px] text-slate-500 font-bold tracking-[0.2em] uppercase">
             <button 
+              onClick={() => { setActiveView('home'); setShowHistory(false); }}
+              className={`${activeView === 'home' ? 'text-white' : 'hover:text-indigo-400'} transition-colors`}
+            >
+              Mirror Home
+            </button>
+            <button 
               onClick={() => setShowHistory(!showHistory)}
               className={`${showHistory ? 'text-white' : 'hover:text-indigo-400'} transition-colors flex items-center gap-2`}
             >
               Reflection Log
             </button>
+            <button 
+              onClick={() => { setActiveView('insights'); setShowHistory(false); }}
+              className={`${activeView === 'insights' ? 'text-white' : 'hover:text-indigo-400'} transition-colors`}
+            >
+              Insights
+            </button>
             <span className="cursor-pointer hover:text-indigo-400 transition-colors">HabitLens Map</span>
-            <span className="cursor-pointer hover:text-indigo-400 transition-colors">Insights</span>
             <span className="cursor-pointer hover:text-indigo-400 transition-colors">Settings</span>
           </nav>
 
